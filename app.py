@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from supabase import create_client, Client
 import requests
 from sentence_transformers import SentenceTransformer
+from opencage.geocoder import OpenCageGeocode
 
 # Настройки Supabase (замени своими значениями)
 SUPABASE_URL = "https://fvsmeqeggqlxseneinbc.supabase.co"
@@ -12,6 +13,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 SCHEMA_NAME = "public"
 
 NOMINATUM_URL = "https://nominatim.openstreetmap.org/search"
+
+OPENCAGE_API_KEY = "24157cbea4534cba954c14a715392e47"
 
 DEFAULT_CITY = "Tallinn"
 DEFAULT_COUNTRY = "Estonia"
@@ -265,7 +268,9 @@ def get_coordinates(address):
     if DEFAULT_COUNTRY not in address:
         address = f"{address}, {DEFAULT_COUNTRY}"
 
-    
+    #return getNominatumCoordinates(address)
+    return getOpenCageCoordinates(address)
+
     # check if address is already registered in dictionary table address_directory
     dictionary_response = supabase.table("address_directory").select("*").eq("address", address).execute()
     if dictionary_response.data:
@@ -277,6 +282,15 @@ def get_coordinates(address):
 
         return dictionary_response.data[0]["latitude"], dictionary_response.data[0]["longitude"]
 
+
+def getOpenCageCoordinates(address):
+    geocoder = OpenCageGeocode(key=OPENCAGE_API_KEY)
+    results = geocoder.geocode(address)
+    if results:
+        return results[0]['geometry']['lat'], results[0]['geometry']['lng']
+    return None, None
+
+def getNominatumCoordinates(address):
     # if not, get coordinates from nominatum
     params = {
         "q": address,
@@ -304,7 +318,6 @@ def get_coordinates(address):
     except Exception as e:
         print(f"Error getting coordinates: {e}")
         return None, None
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

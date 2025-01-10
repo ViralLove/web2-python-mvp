@@ -65,3 +65,4 @@ yarl==1.18.3
 Flask
 openai
 gunicorn
+opencage
