@@ -268,10 +268,8 @@ def get_coordinates(address):
     if DEFAULT_COUNTRY not in address:
         address = f"{address}, {DEFAULT_COUNTRY}"
 
-    #return getNominatumCoordinates(address)
-    return getOpenCageCoordinates(address)
 
-    # check if address is already registered in dictionary table address_directory
+    # Check if address is already registered in dictionary and return coordinates
     dictionary_response = supabase.table("address_directory").select("*").eq("address", address).execute()
     if dictionary_response.data:
         # print address retrieved from dictionary with all parameters printed one by one
@@ -282,6 +280,8 @@ def get_coordinates(address):
 
         return dictionary_response.data[0]["latitude"], dictionary_response.data[0]["longitude"]
 
+    # Otherwise return getNominatumCoordinates(address)
+    return getOpenCageCoordinates(address)
 
 def getOpenCageCoordinates(address):
     geocoder = OpenCageGeocode(key=OPENCAGE_API_KEY)
