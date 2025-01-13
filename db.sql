@@ -17,6 +17,7 @@ CREATE TABLE events (
     external_links JSONB,                   -- Внешние ссылки (массив JSON)
     online_access TEXT,                     -- Ссылка на онлайн-доступ (опционально)
     organizer_id INT REFERENCES organizers(id) ON DELETE SET NULL, -- Связь с организатором
+    location_coords GEOGRAPHY(POINT),       -- Координаты местоположения (геометрия)
     created_at TIMESTAMP DEFAULT NOW(),     -- Дата создания
     updated_at TIMESTAMP DEFAULT NOW()      -- Дата обновления
 );
@@ -30,7 +31,20 @@ CREATE TABLE event_schedules (
     created_at TIMESTAMP DEFAULT NOW()  -- Дата создания
 );
 
--- Создаем таблицу dictionary_age_groups
+-- Создаем таблицу address_directory
+CREATE TABLE address_directory (
+    id SERIAL PRIMARY KEY,          -- Уникальный идентификатор
+    address TEXT,                   -- Адрес (текст)
+    latitude FLOAT8,                -- Широта
+    longitude FLOAT8,               -- Долгота
+    created_at TIMESTAMP DEFAULT NOW(), -- Дата и время создания
+    city TEXT,                      -- Город
+    country TEXT,                   -- Страна
+    region TEXT                     -- Регион
+);
+
+
+-- Создаем таблицу dictionary_age_groups про возрастные группы (это важно для подбора событий для детей, для пожилых людей, чтобы дифференциировать в общей массе событий)
 CREATE TABLE dictionary_age_groups (
     id SERIAL PRIMARY KEY,
     age_group TEXT NOT NULL UNIQUE,     -- Возрастная группа
@@ -45,7 +59,7 @@ CREATE TABLE event_age_groups (
     created_at TIMESTAMP DEFAULT NOW()                          -- Дата создания
 );
 
--- Создаем таблицу dictionary_interests
+-- Создаем таблицу dictionary_interests про темы событий и пересекающиеся интересы тех, кто ими может заинтересоваться
 CREATE TABLE dictionary_interests (
     id SERIAL PRIMARY KEY,
     interest TEXT NOT NULL UNIQUE,      -- Интерес
@@ -67,7 +81,7 @@ CREATE TABLE dictionary_languages (
     created_at TIMESTAMP DEFAULT NOW()  -- Дата создания
 );
 
--- Создаем таблицу event_languages
+-- Создаем таблицу event_languages (особенно актуально для мультиязычных городов таких как Таллинн или Брюссель, где разные языковые сообщества проводят события для своих)
 CREATE TABLE event_languages (
     id SERIAL PRIMARY KEY,
     event_id INT REFERENCES events(id) ON DELETE CASCADE,       -- Связь с событием
@@ -80,12 +94,18 @@ CREATE INDEX idx_event_schedules_event_id ON event_schedules (event_id);
 CREATE INDEX idx_event_age_groups_event_id ON event_age_groups (event_id);
 CREATE INDEX idx_event_interests_event_id ON event_interests (event_id);
 CREATE INDEX idx_event_languages_event_id ON event_languages (event_id);
+CREATE INDEX idx_address_directory_address ON address_directory (address);
+CREATE INDEX idx_address_directory_coords ON address_directory (latitude, longitude);
+CREATE INDEX idx_address_directory_country ON address_directory (country);
+CREATE INDEX idx_address_directory_city ON address_directory (city);
+CREATE INDEX idx_address_directory_region ON address_directory (region);
+
 
 -- Эмбеддинги для интересов
 CREATE TABLE interest_embeddings (
     id SERIAL PRIMARY KEY,
     interest_id INT REFERENCES dictionary_interests(id) ON DELETE CASCADE, -- Ссылка на словарь
-    embedding VECTOR(768) NOT NULL, -- Эмбеддинг интереса
+    embedding VECTOR(384) NOT NULL, -- Эмбеддинг интереса
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -93,7 +113,7 @@ CREATE TABLE interest_embeddings (
 CREATE TABLE age_group_embeddings (
     id SERIAL PRIMARY KEY,
     age_group_id INT REFERENCES dictionary_age_groups(id) ON DELETE CASCADE, -- Ссылка на словарь
-    embedding VECTOR(768) NOT NULL, -- Эмбеддинг возрастной группы
+    embedding VECTOR(384) NOT NULL, -- Эмбеддинг возрастной группы
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -101,7 +121,7 @@ CREATE TABLE age_group_embeddings (
 CREATE TABLE language_embeddings (
     id SERIAL PRIMARY KEY,
     language_id INT REFERENCES dictionary_languages(id) ON DELETE CASCADE, -- Ссылка на словарь
-    embedding VECTOR(768) NOT NULL, -- Эмбеддинг языка
+    embedding VECTOR(384) NOT NULL, -- Эмбеддинг языка
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -109,7 +129,7 @@ CREATE TABLE language_embeddings (
 CREATE TABLE event_title_embeddings (
     id SERIAL PRIMARY KEY,
     event_id INT REFERENCES events(id) ON DELETE CASCADE,
-    title_embedding VECTOR(768) NOT NULL, -- Эмбеддинг
+    title_embedding VECTOR(384) NOT NULL, -- Эмбеддинг
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -117,6 +137,6 @@ CREATE TABLE event_title_embeddings (
 CREATE TABLE event_description_embeddings (
     id SERIAL PRIMARY KEY,
     event_id INT REFERENCES events(id) ON DELETE CASCADE,
-    description_embedding VECTOR(768) NOT NULL, -- Эмбеддинг
+    description_embedding VECTOR(384) NOT NULL, -- Эмбеддинг
     created_at TIMESTAMP DEFAULT NOW()
 );

@@ -1,12 +1,17 @@
 from flask import Flask, request, jsonify
 from supabase import create_client, Client
 import requests
-from sentence_transformers import SentenceTransformer
 from opencage.geocoder import OpenCageGeocode
+import jwt
+import datetime
 
 # Настройки Supabase (замени своими значениями)
 SUPABASE_URL = "https://fvsmeqeggqlxseneinbc.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2c21lcWVnZ3FseHNlbmVpbmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYxOTM1MzYsImV4cCI6MjA1MTc2OTUzNn0.xpWvF0nOJNMNZliP_sHnwPuavQ6f9wlDyjdkSWfG4CE"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2c21lcWVnZ3FseHNlbmVpbmJjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNjY3NzUxMCwiZXhwIjoyMDUyMjUzNTEwfQ.6Lw4Ms-6f46mmXzcObDIPyZYa26Tb6inMyFcPMqY2V0"
+
+SUPABASE_FUNCTION_URL = "https://fvsmeqeggqlxseneinbc.functions.supabase.co/vectorize"
+SUPABASE_JWT_SECRET = "zx5hoiz3f1l0f+q1uxSl5cHUHEebAhUCFn7OM4g9ymwopDCEv4YtWymNWVLuy+o8JYV0UfTsaBTQDRhIoxTAZQ=="
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -19,9 +24,6 @@ OPENCAGE_API_KEY = "24157cbea4534cba954c14a715392e47"
 DEFAULT_CITY = "Tallinn"
 DEFAULT_COUNTRY = "Estonia"
 
-shortDataModel = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-longDataModel = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-
 app = Flask(__name__)
 
 #create a very simple GET endpoint "test" that returns "Hello, World!"
@@ -32,9 +34,10 @@ def test():
 @app.route('/add-event', methods=['POST'])
 def add_event():
     try:
+        print("Adding event...")
         # Получаем JSON из запроса
         data = request.json
-
+        print(f"Received data: {data}")
         if not data:
             return jsonify({"error": "No JSON provided"}), 400
 
@@ -44,6 +47,7 @@ def add_event():
 
         # Проверяем наличие organizer_name
         organizer_name = event["organizer"]["name"];
+        print(f"Organizer name: {organizer_name}")
         if not organizer_name:
             return jsonify({"error": "Missing 'organizer_name' in JSON"}), 400
 
@@ -52,7 +56,7 @@ def add_event():
 
         # Если организатор не найден, создаём нового
         if not organizer_response.data:
-
+            print(f"Organizer {organizer_name} not found, creating new organizer...")
             new_organizer_data = {
                 "name": organizer_name
             }
@@ -60,17 +64,21 @@ def add_event():
             # Добавляем description, если оно указано
             organizer_description = event["organizer"]["description"];
             if organizer_description:
+                print(f"Organizer description: {organizer_description}")
                 new_organizer_data["description"] = organizer_description
 
             new_organizer = supabase.table("organizers").insert(new_organizer_data).execute()
 
             if not new_organizer.data:
                 return jsonify({"error": "Failed to insert new organizer"}), 500
+            
+            print(f"New organizer created: {new_organizer.data}")
 
             organizer_id = new_organizer.data[0]["id"]
         else:
             organizer_id = organizer_response.data[0]["id"]
         
+        print(f"Organizer ID: {organizer_id}")
         # Получение координат
         lat, lon = None, None
         if event["location"]["type"] == "physical":
@@ -108,13 +116,22 @@ def add_event():
         # insert event description embedding into event_description_embeddings table
         if event_description:
 
-            event_description_embedding = longDataModel.encode(event_description)
-            print(f"Event description embedding: {event_description_embedding.tolist()}")
+            event_description_embedding = vectorize_text(event_description);
+            print(f"Event description embedding: {event_description_embedding}")
 
             supabase.table("event_description_embeddings").insert({
                 "event_id": event_id,
-                "embedding": event_description_embedding.tolist()
+                "description_embedding": event_description_embedding
             }).execute()
+        
+        # event title embedding
+        event_title_embedding = vectorize_text(event["name"])
+        print(f"Event title embedding: {event_title_embedding}")
+
+        supabase.table("event_title_embeddings").insert({
+            "event_id": event_id,
+            "title_embedding": event_title_embedding
+        }).execute()
 
         # Вставляем расписание в таблицу 'event_schedules'
         for schedule in event["schedule"]:
@@ -150,12 +167,12 @@ def add_event():
                 print(f"Age group ID: {age_group_id}")
 
                 # get embedding for age group
-                age_group_embedding = shortDataModel.encode(age_group)
-                print(f"Age group embedding: {age_group_embedding.tolist()}")
+                age_group_embedding = vectorize_text(age_group)
+                print(f"Age group embedding: {age_group_embedding}")
 
                 age_group_embedding_obj = {
                     "age_group_id": age_group_id,
-                    "embedding": age_group_embedding.tolist()
+                    "embedding": age_group_embedding
                 }
 
                 # insert embedding into age_group_embeddings table
@@ -188,12 +205,12 @@ def add_event():
                 interest_id = new_interest.data[0]["id"]
 
                 # get embedding for interest
-                interest_embedding = shortDataModel.encode(interest)
-                print(f"Interest embedding: {interest_embedding.tolist()}")
+                interest_embedding = vectorize_text(interest)
+                print(f"Interest embedding: {interest_embedding}")
 
                 interest_embedding_obj = {
                     "interest_id": interest_id,
-                    "embedding": interest_embedding.tolist()
+                    "embedding": interest_embedding
                 }
 
                 # insert embedding into interest_embeddings table
@@ -225,6 +242,18 @@ def add_event():
 
                 # Получаем ID только что созданного языка
                 language_id = new_language.data[0]["id"]
+
+                # get embedding for language
+                language_embedding = vectorize_text(language)
+                print(f"Language embedding: {language_embedding}")
+
+                language_embedding_obj = {
+                    "language_id": language_id,
+                    "embedding": language_embedding
+                }
+
+                # insert embedding into language_embeddings table
+                supabase.table("language_embeddings").insert(language_embedding_obj).execute()
 
             # Вставляем связь события с языком
             supabase.table("event_languages").insert({
@@ -289,6 +318,61 @@ def getOpenCageCoordinates(address):
     if results:
         return results[0]['geometry']['lat'], results[0]['geometry']['lng']
     return None, None
+
+# Глобальная переменная для токена
+cached_token = None
+cached_token_expiration = None
+
+def get_cached_jwt():
+
+    print(f"Getting cached JWT...")
+    global cached_token, cached_token_expiration
+
+    # Проверяем, есть ли токен в кэше и он ещё действителен
+    if cached_token and cached_token_expiration > datetime.datetime.utcnow():
+        print(f"Cached JWT found: {cached_token}")
+        return cached_token
+
+    # Создаём новый токен
+    payload = {
+        "sub": "user_id",  # Уникальный ID пользователя
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),  # Время жизни токена
+        "aud": "authenticated",  # Аудитория
+    }
+    cached_token = jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm="HS256")
+    cached_token_expiration = payload["exp"]
+
+    print(f"New token created: {cached_token}")
+    print(f"Token expiration: {cached_token_expiration}")
+
+    return cached_token
+
+def vectorize_text(text: str):
+    print(f"Vectorizing text: {text}")
+    headers = {
+        "Authorization": f"Bearer {get_cached_jwt()}",
+        "Content-Type": "application/json",
+    }
+    print(f"Headers: {headers}")
+    payload = {"input": text}
+    print(f"Payload: {payload}")
+
+    try:
+        response = requests.post(SUPABASE_FUNCTION_URL, json=payload, headers=headers)
+        
+        # Проверка успешности запроса
+        if response.status_code == 200:
+            embeddings = response.json().get("embedding")
+            
+            return embeddings
+        else:
+            print(f"Error: Received status code {response.status_code}")
+            print(f"Response: {response.text}")
+            print(f"Response headers: {response.headers}")
+            return None
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
 
 def getNominatumCoordinates(address):
     # if not, get coordinates from nominatum
