@@ -1,15 +1,16 @@
 import jwt
 import datetime
+import os
+# Your Supabase secret
+jwt_secret = os.getenv('SUPABASE_JWT_SECRET')
 
-# Ваш секрет из Supabase
-jwt_secret = "zx5hoiz3f1l0f+q1uxSl5cHUHEebAhUCFn7OM4g9ymwopDCEv4YtWymNWVLuy+o8JYV0UfTsaBTQDRhIoxTAZQ=="
-
-# Создание токена
+# Create JWT token
 payload = {
-    "sub": "user_id",  # Уникальный идентификатор пользователя (может быть любой)
-    "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),  # Время жизни токена
-    "aud": "authenticated",  # Аудитория токена, проверьте настройки Supabase
+    "sub": "user_id",  # Unique user identifier (can be any)
+    "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),  # Token expiration time
+    "aud": "authenticated",  # Token audience, check Supabase settings
 }
 token = jwt.encode(payload, jwt_secret, algorithm="HS256")
 
-print("Ваш токен JWT:", token)
+print("EVT: Your JWT secret:", jwt_secret)
+print("EVT: Your JWT token:", token)

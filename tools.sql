@@ -15,7 +15,8 @@ SELECT
     json_agg(
         json_build_object(
             'start_time', es.start_time,
-            'end_time', es.end_time
+            'end_time', es.end_time,
+            'timezone', es.timezone
         )
     ) AS schedules,
     json_agg(
