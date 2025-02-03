@@ -137,7 +137,7 @@ def addEventAgeGroups(event_id, age_groups):
     for age_group in age_groups:
         print(f"Processing age group: {age_group}")
         # Check if age group exists in dictionary
-        dictionary_response = supabase.table("dictionary_age_groups").select("id").eq("LOWER(age_group)", age_group).execute()
+        dictionary_response = supabase.table("dictionary_age_groups").select("id").eq("age_group", age_group.lower()).execute()
 
         if dictionary_response.data:
             # If age group already exists, use its ID
@@ -180,7 +180,7 @@ def addEventInterests(event_id, interests):
     interest_records = []
     for interest in interests:
         # Check if interest exists in dictionary
-        dictionary_response = supabase.table("dictionary_interests").select("id").eq("LOWER(interest)", interest).execute()
+        dictionary_response = supabase.table("dictionary_interests").select("id").eq("interest", interest.lower()).execute()
 
         if dictionary_response.data:
             # If interest already exists, use its ID
@@ -218,7 +218,7 @@ def addEventLanguages(event_id, languages):
     language_records = []
     for language in languages:
         # Check if language exists in dictionary
-        dictionary_response = supabase.table("dictionary_languages").select("id").eq("LOWER(language)", language).execute()
+        dictionary_response = supabase.table("dictionary_languages").select("id").eq("language", language.lower()).execute()
 
         if dictionary_response.data:
             # If language already exists, use its ID
