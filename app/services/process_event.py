@@ -19,23 +19,23 @@ def process_event():
     if not event:
         return jsonify({"error": "Missing 'event' key in JSON"}), 400
 
-    # Проверяем наличие organizer_name
+    # Validate organizer name
     organizer_name = event["organizer"]["name"];
     print(f"Organizer name: {organizer_name}")
     if not organizer_name:
         return jsonify({"error": "Missing 'organizer_name' in JSON"}), 400
 
-    # Поиск организатора по названию
+    # Search for organizer by name
     organizer_response = supabase.table("organizers").select("id").eq("name", organizer_name).execute()
 
-    # Если организатор не найден, создаём нового
+    # If organizer not found, create new one
     if not organizer_response.data:
         print(f"Organizer {organizer_name} not found, creating new organizer...")
         new_organizer_data = {
             "name": organizer_name
         }
 
-        # Добавляем description, если оно указано
+        # Add description if it is specified
         organizer_description = event["organizer"]["description"];
         if organizer_description:
             print(f"Organizer description: {organizer_description}")
@@ -53,7 +53,7 @@ def process_event():
         organizer_id = organizer_response.data[0]["id"]
     
     print(f"Organizer ID: {organizer_id}")
-    # Получение координат
+    # Get coordinates
     lat, lon = None, None
     if event["location"]["type"] == "physical":
         print(f"Getting coordinates for {event['location']['details']}")
@@ -75,17 +75,17 @@ def process_event():
         "organizer_id": organizer_id  # Привязка организатора
     }
 
-    # Добавление координат, если они получены
+    # Add coordinates if they are obtained
     if lat is not None and lon is not None:
         event_data["location_coords"] = f"SRID=4326;POINT({lon} {lat})"
     
-    # Вставляем данные в таблицу 'events'
+    # Insert data into events table
     event_response = supabase.table("events").insert(event_data).execute()
 
     if not event_response.data:
         return jsonify({"error": "Failed to insert into 'events' table"}), 500
     
-    # Получаем ID вставленного события
+    # Get ID of inserted event
     event_id = event_response.data[0]["id"]
 
     # insert event description embedding into event_description_embeddings table
@@ -108,7 +108,7 @@ def process_event():
         "title_embedding": event_title_embedding
     }).execute()
 
-    # Вставляем расписание в таблицу 'event_schedules'
+    # Insert schedule into event_schedules table
     for schedule in event["schedule"]:
         supabase.table("event_schedules").insert({
             "event_id": event_id,
@@ -116,19 +116,36 @@ def process_event():
             "end_time": schedule["end_time"]
         }).execute()
 
-    # Вставляем возрастные группы в таблицу 'event_age_groups'
-    for age_group in event["audience"]["age_groups"]:
+    # Insert age groups into event_age_groups table
+    if "audience" in event and "age_groups" in event["audience"]:
+        addEventAgeGroups(event_id, event["audience"]["age_groups"])
+
+
+    # Insert interests into event_interests table
+    if "audience" in event and "interests" in event["audience"]:
+        addEventInterests(event_id, event["audience"]["interests"])
+
+
+    # Insert languages into event_languages table
+    if "languages" in event:
+        addEventLanguages(event_id, event["languages"])
+
+    return jsonify({"message": "Event added successfully"}), 201
+
+def addEventAgeGroups(event_id, age_groups):
+    age_group_records = []
+    for age_group in age_groups:
         print(f"Processing age group: {age_group}")
-        # Проверяем, существует ли возрастная группа в словаре
-        dictionary_response = supabase.table("dictionary_age_groups").select("id").eq("age_group", age_group).execute()
+        # Check if age group exists in dictionary
+        dictionary_response = supabase.table("dictionary_age_groups").select("id").eq("LOWER(age_group)", age_group).execute()
 
         if dictionary_response.data:
-            # Если возрастная группа уже существует, используем её ID
+            # If age group already exists, use its ID
             age_group_id = dictionary_response.data[0]["id"]
             print(f"Age group {age_group} already exists in dictionary table dictionary_age_groups")
             print(f"Age group ID: {age_group_id}")
         else:
-            # Если возрастной группы нет, создаём её в словаре
+            # If age group doesn't exist, create it in dictionary
             new_age_group = supabase.table("dictionary_age_groups").insert({
                 "age_group": age_group
             }).execute()
@@ -136,7 +153,7 @@ def process_event():
             if not new_age_group.data:
                 raise Exception(f"Failed to insert age group '{age_group}' into dictionary.")
             
-            # Получаем ID только что созданной возрастной группы
+            # Get ID of newly created age group
             age_group_id = new_age_group.data[0]["id"]
             print(f"Age group {age_group} created in dictionary table dictionary_age_groups")
             print(f"Age group ID: {age_group_id}")
@@ -153,23 +170,23 @@ def process_event():
             # insert embedding into age_group_embeddings table
             supabase.table("age_group_embeddings").insert(age_group_embedding_obj).execute()
 
-        # Вставляем связь события с возрастной группой
-        supabase.table("event_age_groups").insert({
-            "event_id": event_id,
-            "age_group_id": age_group_id
-        }).execute()
+        # Insert relationship between event and age group
+        age_group_records.append({"event_id": event_id, "age_group_id": age_group_id})
 
+    if age_group_records:
+        supabase.table("event_age_groups").insert(age_group_records).execute()
 
-    # Вставляем интересы в таблицу 'event_interests'
-    for interest in event["audience"]["interests"]:
-        # Проверяем, существует ли интерес в словаре
-        dictionary_response = supabase.table("dictionary_interests").select("id").eq("interest", interest).execute()
+def addEventInterests(event_id, interests):
+    interest_records = []
+    for interest in interests:
+        # Check if interest exists in dictionary
+        dictionary_response = supabase.table("dictionary_interests").select("id").eq("LOWER(interest)", interest).execute()
 
         if dictionary_response.data:
-            # Если интерес уже существует, используем его ID
+            # If interest already exists, use its ID
             interest_id = dictionary_response.data[0]["id"]
         else:
-            # Если интереса нет, создаём его в словаре
+            # If interest doesn't exist, create it in dictionary
             new_interest = supabase.table("dictionary_interests").insert({
                 "interest": interest
             }).execute()
@@ -191,23 +208,23 @@ def process_event():
             # insert embedding into interest_embeddings table
             supabase.table("interest_embeddings").insert(interest_embedding_obj).execute()
 
-        # Вставляем связь события с интересом
-        supabase.table("event_interests").insert({
-            "event_id": event_id,
-            "interest_id": interest_id
-        }).execute()
+        # Insert relationship between event and interest
+        interest_records.append({"event_id": event_id, "interest_id": interest_id})
 
+    if interest_records:
+        supabase.table("event_interests").insert(interest_records).execute()
 
-    # Вставляем языки в таблицу 'event_languages'
-    for language in event["audience"]["languages"]:
-        # Проверяем, существует ли язык в словаре
-        dictionary_response = supabase.table("dictionary_languages").select("id").eq("language", language).execute()
+def addEventLanguages(event_id, languages):
+    language_records = []
+    for language in languages:
+        # Check if language exists in dictionary
+        dictionary_response = supabase.table("dictionary_languages").select("id").eq("LOWER(language)", language).execute()
 
         if dictionary_response.data:
-            # Если язык уже существует, используем его ID
+            # If language already exists, use its ID
             language_id = dictionary_response.data[0]["id"]
         else:
-            # Если языка нет, создаём его в словаре
+            # If language doesn't exist, create it in dictionary
             new_language = supabase.table("dictionary_languages").insert({
                 "language": language
             }).execute()
@@ -215,7 +232,7 @@ def process_event():
             if not new_language.data:
                 raise Exception(f"Failed to insert language '{language}' into dictionary.")
 
-            # Получаем ID только что созданного языка
+            # Get ID of newly created language
             language_id = new_language.data[0]["id"]
 
             # get embedding for language
@@ -230,11 +247,8 @@ def process_event():
             # insert embedding into language_embeddings table
             supabase.table("language_embeddings").insert(language_embedding_obj).execute()
 
-        # Вставляем связь события с языком
-        supabase.table("event_languages").insert({
-            "event_id": event_id,
-            "language_id": language_id
-        }).execute()
+        # Insert relationship between event and language
+        language_records.append({"event_id": event_id, "language_id": language_id})
 
-
-    return jsonify({"message": "Event added successfully"}), 201
+    if language_records:
+        supabase.table("event_languages").insert(language_records).execute()

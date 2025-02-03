@@ -1,0 +1,31 @@
+{
+    "event": {
+      "name": "Consciousness Expansion: Gong and Light Journey + Breathing + Biohacking",
+      "description": "🧠⚡️🧠 Expand your consciousness!\n- Breathing session for DMT activation (enhancing awareness and relaxation).\n- Gong journey with Denis Vinogradov (sound therapy for achieving harmony and inner peace).\n- LED light flickering with closed eyes (to synchronize brain hemispheres and promote deep relaxation).\n- Floou Elixirs (to improve mood and reduce stress).\n\n💰 Price: 40€\n❗ Pre-registration: https://helid.ee/event/mindex/booking",
+      "schedule": [
+        {
+          "start_time": "2025-02-08T18:00:00+02:00",
+          "end_time": "2025-02-08T20:00:00+02:00"
+        }
+      ],
+      "audience": {
+        "age_groups": ["Adults"],
+        "interests": ["Meditation", "Sound Therapy", "Biohacking", "Mindfulness"],
+        "languages": ["Estonian", "Russian", "English"]
+      },
+      "location": {
+        "type": "physical",
+        "details": "Helide Lab / Zen Space Studio, Kalaranna 8/11, 10415 Tallinn, Estonia"
+      },
+      "online_access": null,
+      "external_links": [
+        "https://helid.ee/event/mindex/booking",
+        "https://floouelixirs.com"
+      ],
+      "organizer": {
+        "name": "Tervendavad Helid / Healing Sounds Estonia",
+        "description": "Organizer of sound therapy and consciousness-expanding events in Estonia."
+      }
+    }
+  }
+  

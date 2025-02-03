@@ -40,10 +40,13 @@ def get_coordinates(address):
 
 def getOpenCageCoordinates(address):
     geocoder = OpenCageGeocode(key=OPENCAGE_API_KEY)
-    results = geocoder.geocode(address)
-    if results:
-        return results[0]['geometry']['lat'], results[0]['geometry']['lng']
-    return None, None
+    try:
+        results = geocoder.geocode(address)
+        if results:
+            return results[0]['geometry']['lat'], results[0]['geometry']['lng']
+    except Exception as e:
+        print(f"Error getting coordinates: {e}")
+        return None, None
 
 # Глобальная переменная для токена
 cached_token = None
