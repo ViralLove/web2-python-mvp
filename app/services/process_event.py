@@ -6,6 +6,9 @@ from app.utils.ai_helper import vectorize_text
 from app.utils.geocoding import get_coordinates
 from app.db import supabase
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 IS_DEMO = os.getenv("IS_DEMO")
 
@@ -13,124 +16,132 @@ process_event_bp = Blueprint('submit_event', __name__)
 
 @process_event_bp.route('/submit-event', methods=['POST'])
 def process_event():
-    data = request.get_json()
-    event = data.get("event")
-    print(f"Processing event: {event}")
-    if not event:
-        return jsonify({"error": "Missing 'event' key in JSON"}), 400
+    logger.info("Received submit-event request")
+    try:
+        data = request.get_json()
+        logger.debug(f"Request data: {data}")
+        event = data.get("event")
+        if not event:
+            return jsonify({"error": "No event data provided"}), 400
+        print(f"Processing event: {event}")
+        if not event:
+            return jsonify({"error": "Missing 'event' key in JSON"}), 400
 
-    # Validate organizer name
-    organizer_name = event["organizer"]["name"];
-    print(f"Organizer name: {organizer_name}")
-    if not organizer_name:
-        return jsonify({"error": "Missing 'organizer_name' in JSON"}), 400
+        # Validate organizer name
+        organizer_name = event["organizer"]["name"];
+        print(f"Organizer name: {organizer_name}")
+        if not organizer_name:
+            return jsonify({"error": "Missing 'organizer_name' in JSON"}), 400
 
-    # Search for organizer by name
-    organizer_response = supabase.table("organizers").select("id").eq("name", organizer_name).execute()
+        # Search for organizer by name
+        organizer_response = supabase.table("organizers").select("id").eq("name", organizer_name).execute()
 
-    # If organizer not found, create new one
-    if not organizer_response.data:
-        print(f"Organizer {organizer_name} not found, creating new organizer...")
-        new_organizer_data = {
-            "name": organizer_name
+        # If organizer not found, create new one
+        if not organizer_response.data:
+            print(f"Organizer {organizer_name} not found, creating new organizer...")
+            new_organizer_data = {
+                "name": organizer_name
+            }
+
+            # Add description if it is specified
+            organizer_description = event["organizer"]["description"];
+            if organizer_description:
+                print(f"Organizer description: {organizer_description}")
+                new_organizer_data["description"] = organizer_description
+
+            new_organizer = supabase.table("organizers").insert(new_organizer_data).execute()
+
+            if not new_organizer.data:
+                return jsonify({"error": "Failed to insert new organizer"}), 500
+            
+            print(f"New organizer created: {new_organizer.data}")
+
+            organizer_id = new_organizer.data[0]["id"]
+        else:
+            organizer_id = organizer_response.data[0]["id"]
+        
+        print(f"Organizer ID: {organizer_id}")
+        # Get coordinates
+        lat, lon = None, None
+        if event["location"]["type"] == "physical":
+            print(f"Getting coordinates for {event['location']['details']}")
+            lat, lon = get_coordinates(event["location"]["details"])
+
+        # output coordinates
+        print(f"Coordinates: {lat}, {lon}")
+
+        event_description = event.get("description")
+        
+        event_data = {
+            "name": event["name"],
+            "is_demo": IS_DEMO,
+            "description": event_description,
+            "location_type": event["location"]["type"],
+            "location_details": event["location"]["details"],
+            "external_links": event.get("external_links", []),  # Массив ссылок на внешние ресурсы, по умолчанию пустой
+            "online_access": event.get("online_access"),  # Ссылка для онлайн-доступа, по умолчанию None
+            "organizer_id": organizer_id  # Привязка организатора
         }
 
-        # Add description if it is specified
-        organizer_description = event["organizer"]["description"];
-        if organizer_description:
-            print(f"Organizer description: {organizer_description}")
-            new_organizer_data["description"] = organizer_description
-
-        new_organizer = supabase.table("organizers").insert(new_organizer_data).execute()
-
-        if not new_organizer.data:
-            return jsonify({"error": "Failed to insert new organizer"}), 500
+        # Add coordinates if they are obtained
+        if lat is not None and lon is not None:
+            event_data["location_coords"] = f"SRID=4326;POINT({lon} {lat})"
         
-        print(f"New organizer created: {new_organizer.data}")
+        # Insert data into events table
+        event_response = supabase.table("events").insert(event_data).execute()
 
-        organizer_id = new_organizer.data[0]["id"]
-    else:
-        organizer_id = organizer_response.data[0]["id"]
-    
-    print(f"Organizer ID: {organizer_id}")
-    # Get coordinates
-    lat, lon = None, None
-    if event["location"]["type"] == "physical":
-        print(f"Getting coordinates for {event['location']['details']}")
-        lat, lon = get_coordinates(event["location"]["details"])
+        if not event_response.data:
+            return jsonify({"error": "Failed to insert into 'events' table"}), 500
+        
+        # Get ID of inserted event
+        event_id = event_response.data[0]["id"]
 
-    # output coordinates
-    print(f"Coordinates: {lat}, {lon}")
+        # insert event description embedding into event_description_embeddings table
+        if event_description:
 
-    event_description = event.get("description")
-    
-    event_data = {
-        "name": event["name"],
-        "is_demo": IS_DEMO,
-        "description": event_description,
-        "location_type": event["location"]["type"],
-        "location_details": event["location"]["details"],
-        "external_links": event.get("external_links", []),  # Массив ссылок на внешние ресурсы, по умолчанию пустой
-        "online_access": event.get("online_access"),  # Ссылка для онлайн-доступа, по умолчанию None
-        "organizer_id": organizer_id  # Привязка организатора
-    }
+            event_description_embedding = vectorize_text(event_description);
+            print(f"Event description embedding: {event_description_embedding}")
 
-    # Add coordinates if they are obtained
-    if lat is not None and lon is not None:
-        event_data["location_coords"] = f"SRID=4326;POINT({lon} {lat})"
-    
-    # Insert data into events table
-    event_response = supabase.table("events").insert(event_data).execute()
+            supabase.table("event_description_embeddings").insert({
+                "event_id": event_id,
+                "description_embedding": event_description_embedding
+            }).execute()
+        
+        # event title embedding
+        event_title_embedding = vectorize_text(event["name"])
+        print(f"Event title embedding: {event_title_embedding}")
 
-    if not event_response.data:
-        return jsonify({"error": "Failed to insert into 'events' table"}), 500
-    
-    # Get ID of inserted event
-    event_id = event_response.data[0]["id"]
-
-    # insert event description embedding into event_description_embeddings table
-    if event_description:
-
-        event_description_embedding = vectorize_text(event_description);
-        print(f"Event description embedding: {event_description_embedding}")
-
-        supabase.table("event_description_embeddings").insert({
+        supabase.table("event_title_embeddings").insert({
             "event_id": event_id,
-            "description_embedding": event_description_embedding
-        }).execute()
-    
-    # event title embedding
-    event_title_embedding = vectorize_text(event["name"])
-    print(f"Event title embedding: {event_title_embedding}")
-
-    supabase.table("event_title_embeddings").insert({
-        "event_id": event_id,
-        "title_embedding": event_title_embedding
-    }).execute()
-
-    # Insert schedule into event_schedules table
-    for schedule in event["schedule"]:
-        supabase.table("event_schedules").insert({
-            "event_id": event_id,
-            "start_time": schedule["start_time"],
-            "end_time": schedule["end_time"]
+            "title_embedding": event_title_embedding
         }).execute()
 
-    # Insert age groups into event_age_groups table
-    if "audience" in event and "age_groups" in event["audience"]:
-        addEventAgeGroups(event_id, event["audience"]["age_groups"])
+        # Insert schedule into event_schedules table
+        for schedule in event["schedule"]:
+            supabase.table("event_schedules").insert({
+                "event_id": event_id,
+                "start_time": schedule["start_time"],
+                "end_time": schedule["end_time"]
+            }).execute()
+
+        # Insert age groups into event_age_groups table
+        if "audience" in event and "age_groups" in event["audience"]:
+            addEventAgeGroups(event_id, event["audience"]["age_groups"])
 
 
-    # Insert interests into event_interests table
-    if "audience" in event and "interests" in event["audience"]:
-        addEventInterests(event_id, event["audience"]["interests"])
+        # Insert interests into event_interests table
+        if "audience" in event and "interests" in event["audience"]:
+            addEventInterests(event_id, event["audience"]["interests"])
 
 
-    # Insert languages into event_languages table
-    if "languages" in event:
-        addEventLanguages(event_id, event["languages"])
+        # Insert languages into event_languages table
+        if "languages" in event:
+            addEventLanguages(event_id, event["languages"])
 
-    return jsonify({"message": "Event added successfully"}), 201
+        return jsonify({"message": "Event added successfully"}), 201
+    except Exception as e:
+        logger.error(f"Error processing event: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 def addEventAgeGroups(event_id, age_groups):
     age_group_records = []
