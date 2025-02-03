@@ -163,7 +163,7 @@ def addEventAgeGroups(event_id, age_groups):
         else:
             # If age group doesn't exist, create it in dictionary
             new_age_group = supabase.table("dictionary_age_groups").insert({
-                "age_group": age_group
+                "age_group": age_group.lower()
             }).execute()
 
             if not new_age_group.data:
@@ -204,7 +204,7 @@ def addEventInterests(event_id, interests):
         else:
             # If interest doesn't exist, create it in dictionary
             new_interest = supabase.table("dictionary_interests").insert({
-                "interest": interest
+                "interest": interest.lower()
             }).execute()
 
             if not new_interest.data:
@@ -242,7 +242,7 @@ def addEventLanguages(event_id, languages):
         else:
             # If language doesn't exist, create it in dictionary
             new_language = supabase.table("dictionary_languages").insert({
-                "language": language
+                "language": language.lower()
             }).execute()
 
             if not new_language.data:
