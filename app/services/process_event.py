@@ -14,6 +14,11 @@ IS_DEMO = os.getenv("IS_DEMO")
 
 process_event_bp = Blueprint('submit_event', __name__)
 
+@process_event_bp.route('/hello-world', methods=['GET'])
+def hello_world():
+    name = request.args.get('name')
+    return jsonify({"message": f"Hello, {name}!"}), 200
+
 @process_event_bp.route('/submit-event', methods=['POST'])
 def process_event():
     logger.info("Received submit-event request")

@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+  title: Event Submission API
+  description: API for submitting structured event data.
+  version: 1.1.0
+servers:
+  - url: https://web2-python-mvp-production.up.railway.app/api/v1
+paths:
+  /submit-event:
+    post:
+      operationId: submitEvent
+      summary: Submit an event
+      description: Allows users to submit events with structured details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event
+              properties:
+                event:
+                  type: object
+                  required:
+                    - name
+                    - description
+                    - schedule
+                    - audience
+                    - location
+                    - organizer
+                  properties:
+                    name:
+                      type: string
+                      description: The name of the event.
+                      example: "Consciousness Expansion: Gong and Light Journey + Breathing + Biohacking"
+                    description:
+                      type: string
+                      description: Detailed event description.
+                      example: "Expand your consciousness! Join our session for breathwork, sound therapy, and relaxation."
+                    schedule:
+                      type: array
+                      description: List of event schedules. Can include one-time, recurring, or multi-day events.
+                      minItems: 1
+                      items:
+                        type: object
+                        required:
+                          - start_time
+                          - end_time
+                        properties:
+                          start_time:
+                            type: string
+                            format: date-time
+                            description: Start time in ISO 8601 format.
+                            example: "2025-02-08T18:00:00+02:00"
+                          end_time:
+                            type: string
+                            format: date-time
+                            description: End time in ISO 8601 format.
+                            example: "2025-02-08T20:00:00+02:00"
+                    audience:
+                      type: object
+                      description: Target audience information.
+                      properties:
+                        age_groups:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Adults"]
+                        interests:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Meditation", "Sound Therapy", "Biohacking"]
+                        languages:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Estonian", "Russian", "English"]
+                    location:
+                      type: object
+                      required:
+                        - type
+                        - details
+                      properties:
+                        type:
+                          type: string
+                          enum: ["physical", "online", "hybrid"]
+                          description: Event location type.
+                          example: "physical"
+                        details:
+                          type: string
+                          description: Location details or platform name.
+                          example: "Helide Lab / Zen Space Studio, Kalaranna 8/11, 10415 Tallinn, Estonia"
+                    online_access:
+                      type: string
+                      nullable: true
+                      description: Online event access URL (if applicable).
+                      example: "https://zoom.us/j/1234567890"
+                    external_links:
+                      type: array
+                      description: Related external links for the event.
+                      items:
+                        type: string
+                      example:  
+                        - "https://helid.ee/event/mindex/booking"
+                        - "https://floouelixirs.com"
+                    organizer:
+                      type: object
+                      required:
+                        - name
+                      properties:
+                        name:
+                          type: string
+                          description: Name of the organizer.
+                          example: "Tervendavad Helid / Healing Sounds Estonia"
+                        description:
+                          type: string
+                          nullable: true
+                          description: Brief organizer description.
+                          example: "Organizer of sound therapy and consciousness-expanding events in Estonia."
+      responses:
+        "200":
+          description: Event submission successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Event submitted successfully!"
+        "400":
+          description: Bad request (invalid input)
+        "500":
+          description: Internal server error
