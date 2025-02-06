@@ -89,6 +89,17 @@ CREATE TABLE event_languages (
     created_at TIMESTAMP DEFAULT NOW()                          -- Дата создания
 );
 
+-- Создаем таблицу event_hashes с полями location_hash, schedule_hash, organizer_hash, title_hash
+CREATE TABLE event_hashes (
+    id SERIAL PRIMARY KEY,
+    event_id INT REFERENCES events(id) ON DELETE CASCADE,       -- Связь с событием
+    location_hash TEXT,
+    schedule_hash TEXT,
+    organizer_hash TEXT,
+    title_hash TEXT,
+    created_at TIMESTAMP DEFAULT NOW()                          -- Дата создания
+);
+
 -- Создаем индексы для оптимизации запросов
 CREATE INDEX idx_event_schedules_event_id ON event_schedules (event_id);
 CREATE INDEX idx_event_age_groups_event_id ON event_age_groups (event_id);
@@ -99,6 +110,10 @@ CREATE INDEX idx_address_directory_coords ON address_directory (latitude, longit
 CREATE INDEX idx_address_directory_country ON address_directory (country);
 CREATE INDEX idx_address_directory_city ON address_directory (city);
 CREATE INDEX idx_address_directory_region ON address_directory (region);
+CREATE INDEX idx_event_hashes_location_hash ON event_hashes (location_hash);
+CREATE INDEX idx_event_hashes_schedule_hash ON event_hashes (schedule_hash);
+CREATE INDEX idx_event_hashes_organizer_hash ON event_hashes (organizer_hash);
+CREATE INDEX idx_event_hashes_title_hash ON event_hashes (title_hash);
 
 
 -- Эмбеддинги для интересов

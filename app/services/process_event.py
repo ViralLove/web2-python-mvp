@@ -7,6 +7,8 @@ from app.utils.geocoding import get_coordinates
 from app.db import supabase
 import os
 import logging
+import hashlib
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,107 @@ process_event_bp = Blueprint('submit_event', __name__)
 def hello_world():
     name = request.args.get('name')
     return jsonify({"message": f"Hello, {name}!"}), 200
+
+@process_event_bp.route('/validate-duplicates', methods=['POST'])
+def validate_duplicates():
+    data = request.get_json()
+    logger.debug(f"Request data: {data}")
+    event = data.get("event")
+    print(f"Event: {event}")
+
+    # location hash — make hash from all fields in location
+    location = event.get("location").get("details")
+    if (location):
+        location_hash = hashlib.sha256(location.encode()).hexdigest()
+        print(f"Location hash: {location_hash}")
+    else:
+        location_hash = None
+
+    # schedule hash — make hash from all fields in schedule
+    schedule = event.get("schedule")
+    if (schedule):
+        schedule_hash = hashlib.sha256(json.dumps(schedule).encode()).hexdigest()
+        print(f"Schedule hash: {schedule_hash}")
+    else:
+        schedule_hash = None
+
+    # organizer hash — make hash from all fields in organizer
+    organizer = event.get("organizer").get("name")
+    if (organizer):
+        organizer_hash = hashlib.sha256(json.dumps(organizer).encode()).hexdigest()
+        print(f"Organizer hash: {organizer_hash}")
+    else:
+        organizer_hash = None
+
+    #title hash — make hash from title
+    title = event.get("name")
+    if (title):
+        title_hash = hashlib.sha256(title.encode()).hexdigest()
+        print(f"Title hash: {title_hash}")
+    else:
+        title_hash = None
+    
+    # check if event with such hash exists
+    event_hash_response = supabase.table("event_hashes").select("id, event_id").eq("location_hash", location_hash).eq("schedule_hash", schedule_hash).eq("organizer_hash", organizer_hash).eq("title_hash", title_hash).execute()
+
+    print(f"Event hash response: {event_hash_response}")
+    detected_events = []
+    if event_hash_response.data:
+        #iterate over event_hash_response.data and get event id
+        for event_hash in event_hash_response.data:
+            print(f"Event hash: {event_hash}")
+            event_id = event_hash.get("event_id")
+            print(f"Event ID: {event_id}")
+            # get event from events table
+            event_response = supabase.table("events").select("*").eq("id", event_id).execute()
+            print(f"Event response: {event_response}")
+            detected_events.append(event_response.data[0])
+    else:
+        detected_events = []
+    
+    if detected_events:
+        return jsonify({"detected_events": detected_events}), 201
+    else:
+        return jsonify({"detected_events": []}), 200
+
+# build me a method to save hash for all event fields that I check when validating duplicates
+def save_event_hash(event):
+
+    # save hash for location, schedule, organizer, title
+    hash_obj = {
+        "event_id": event["id"],
+        "location_hash": None,
+        "schedule_hash": None,
+        "organizer_hash": None,
+        "title_hash": None
+    }
+
+    # save hash for location
+    location = event.get("location").get("details")
+    if (location):
+        hash_obj["location_hash"] = hashlib.sha256(location.encode()).hexdigest()
+
+    # save hash for schedule
+    schedule = event.get("schedule")
+    if (schedule):
+        hash_obj["schedule_hash"] = hashlib.sha256(json.dumps(schedule).encode()).hexdigest()
+    
+    # save hash for organizer
+    organizer = event.get("organizer").get("name")
+    if (organizer):
+        hash_obj["organizer_hash"] = hashlib.sha256(json.dumps(organizer).encode()).hexdigest()
+
+    # save hash for title
+    title = event.get("name")
+    if (title):
+        hash_obj["title_hash"] = hashlib.sha256(title.encode()).hexdigest()
+
+    print(f"Hash object: {hash_obj}")
+
+    # save hash to the event
+    supabase.table("event_hashes").insert(hash_obj).execute()
+
+    return hash_obj
 
 @process_event_bp.route('/submit-event', methods=['POST'])
 def process_event():
@@ -95,6 +198,8 @@ def process_event():
         # Insert data into events table
         event_response = supabase.table("events").insert(event_data).execute()
 
+        event["id"] = event_response.data[0]["id"]
+
         if not event_response.data:
             return jsonify({"error": "Failed to insert into 'events' table"}), 500
         
@@ -143,7 +248,10 @@ def process_event():
         if "languages" in event:
             addEventLanguages(event_id, event["languages"])
 
-        return jsonify({"message": "Event added successfully"}), 201
+        # save hash for event
+        save_event_hash(event)
+
+        return jsonify({"message": "Event added successfully", "event": event}), 201
     except Exception as e:
         logger.error(f"Error processing event: {str(e)}")
         return jsonify({"error": str(e)}), 500

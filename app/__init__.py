@@ -9,8 +9,13 @@ def create_app():
     app = Flask(__name__)
     
     # Настройка логирования
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+
+    # Отключаем детальные логи для конкретных модулей
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("hpack").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     
     # Настройка CORS
     CORS(app)
